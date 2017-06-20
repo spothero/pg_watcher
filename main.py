@@ -16,13 +16,11 @@ fh.setFormatter(logging.Formatter(FORMAT))
 
 logger.addHandler(fh)
 
-def connect_db(host, user, password):
+def connect_db(host, user):
     """Get a database connection."""
     return psycopg2.connect(
         dbname='postgres',
         user=user,
-        password=password,
-        host=host
         )
 
 
@@ -67,7 +65,6 @@ def take_args():
     try:
         args['host'] = os.environ['WATCHER_HOST']
         args['username'] = os.environ['WATCHER_USERNAME']
-        args['password'] = os.environ['WATCHER_PASSWORD']
         args['seconds'] = os.environ['WATCHER_SECONDS']
         try:
             ## If WATCHER_KILL is set, neat, if not no worries
@@ -79,10 +76,9 @@ def take_args():
         logger.error(e)
         logger.error("""please make sure all the following env variables are populated
         export WATCHER_HOST=localhost
-        export WATCHER_USERNAME=user
-        export WATCHER_PASSWORD=hello
+        export WATCHER_USERNAME=postgres
         export WATCHER_SECONDS=60
-        export WATCHER_KILL=false
+        export WATCHER_KILL=false|true
         """)
         sys.exit(1)
     return args
@@ -94,7 +90,7 @@ def report_query():
 if __name__ == '__main__':
     args = take_args()
     #print args
-    connection = connect_db(args['host'], args['username'], args['password'])
+    connection = connect_db(args['host'], args['username'])
     logger.debug('Got database connection to {}'.format(args['host']))
     queries = check_long_running_queries(connection, args['seconds'])
 
