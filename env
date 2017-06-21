@@ -1,0 +1,4 @@
+export WATCHER_KILL=false
+export WATCHER_USERNAME=postgres
+export WATCHER_SECONDS=21600
+export WATCHER_HOST=localhost
