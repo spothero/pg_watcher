@@ -2,8 +2,14 @@
 
 import os
 import sys
+import socket
 import psycopg2
 import logging
+
+try:
+    from slackwebhook import slackwebhook
+except ImportError:
+    pass
 
 FORMAT = '%(asctime)-15s %(message)s'
 logging.basicConfig(format=FORMAT)
@@ -48,12 +54,22 @@ def check_long_running_queries(conn, seconds):
 
 
 
-def kill_query(conn, pid):
+def kill_query(conn, pid, slack_enabled=False):
     """Kill a query, report an error if you can't"""
     logger.info('killing pid: {}'.format(pid))
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT pg_cancel_backend({});".format(pid))
+
+        if slack_enabled:
+            deathhook = slackwebhook(args['slack_webhook'])
+            deathhook.rich_format_post(
+                fallback='Canceled query pid: {} on {}'.format(pid, socket.gethostname()),
+                title="long-running-queries canceled",
+                value='Canceled query pid: {} on {}'.format(pid, socket.gethostname()),
+                short=False,
+                color="#FF0000"
+                )
     except Exception as e:
         logger.error("something went wrong killing pid {}, please investigate".format(pid))
     pass
@@ -63,14 +79,27 @@ def take_args():
     """Verify that we have the proper environment variables"""
     args = {}
     try:
-        args['host'] = os.environ['WATCHER_HOST']
-        args['username'] = os.environ['WATCHER_USERNAME']
-        args['seconds'] = os.environ['WATCHER_SECONDS']
+
         try:
             ## If WATCHER_KILL is set, neat, if not no worries
             args['kill'] = os.environ['WATCHER_KILL']
         except KeyError:
             pass
+
+        try:
+            ## If WATCHER_SLACK_WEBHOOK is set, we'll use webhooks
+            args['slack_webhook'] = os.environ['WATCHER_SLACK_WEBHOOK']
+            #args['slack_channel'] = os.environ['WATCHER_SLACK_CHANNEL']
+            args['slack_enabled'] = True
+        except KeyError:
+            args['slack_webhook'] = None
+            args['slack_channel'] = None
+            args['slack_enabled'] = False
+            pass
+
+        args['host'] = os.environ['WATCHER_HOST']
+        args['username'] = os.environ['WATCHER_USERNAME']
+        args['seconds'] = os.environ['WATCHER_SECONDS']
 
     except KeyError as e:
         logger.error(e)
@@ -83,8 +112,10 @@ def take_args():
         sys.exit(1)
     return args
 
-def report_query():
-    pass
+def report_query(query):
+    logger.info('Query Found: {}'.format(query))
+
+    return
 
 
 if __name__ == '__main__':
@@ -96,11 +127,21 @@ if __name__ == '__main__':
 
     if len(queries) > 0:
         logger.info('Found {} queries over {} seconds'.format(len(queries), args['seconds']))
+        if args['slack_enabled']:
+            mywebhook = slackwebhook(args['slack_webhook'])
+            mywebhook.rich_format_post(
+                fallback='Found {} queries over {} seconds on {}'.format(len(queries), args['seconds'], socket.gethostname()),
+                title="long-running-queries found alert",
+                value='Found {} queries over {} seconds on {}'.format(len(queries), args['seconds'], socket.gethostname()),
+                short=False,
+                color="ffa500"
+                )
+
         for i in queries:
-            logger.info('Query Found: {}'.format(i))
+            report_query(i)
             try:
                 if args['kill'] == 'true':
-                    kill_query(connection, i[0])
+                    kill_query(connection, i[0], args['slack_enabled'])
             except KeyError:
                 pass
     else:
